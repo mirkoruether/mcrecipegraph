@@ -51,8 +51,9 @@ class Item():
 class RecipeGraph():
     items:Dict[str, Item] = {}
 
-    def __init__(self, df_recipes) -> None:
-        self.df_recipes = df_recipes
+    def __init__(self, df_recipes:pd.DataFrame, forceatomic:List[str]=None) -> None:
+        self.df_recipes:pd.DataFrame = df_recipes
+        self.forceatomic:List[str] = forceatomic if forceatomic else []
 
     @staticmethod
     def resolve_itemname(itemname:str):
@@ -68,6 +69,8 @@ class RecipeGraph():
         return itemobj
 
     def register_recipes(self, itemobj:Item):
+        if itemobj.name in self.forceatomic:
+            return
         df_rf = self.df_recipes.loc[self.df_recipes['resitem'] == itemobj.name]
         for _, row in df_rf.iterrows():
             ingredient_name_amounts = Counter([

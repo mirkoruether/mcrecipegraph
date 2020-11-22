@@ -1,0 +1,37 @@
+forceatomic:
+  # Pams Harvestcraft Tools
+  - <harvestcraft:cuttingboarditem>
+  - <harvestcraft:mortarandpestleitem>
+  - <harvestcraft:saucepanitem>
+  - <harvestcraft:bakewareitem>
+  - <harvestcraft:potitem>
+  - <harvestcraft:juiceritem>
+  - <harvestcraft:skilletitem>
+  - <harvestcraft:mixingbowlitem>
+  # Items with circular recipes
+  - <minecraft:wheat>
+  - <minecraft:slime_ball>
+  - <minecraft:iron_ingot>
+  - <minecraft:gold_ingot>
+  - <minecraft:redstone>
+  - <minecraft:dye:4> # Lapis
+  - <minecraft:coal>
+  # Huge oredicts
+  - <ore:logWood>
+  - <ore:plankWood>
+  - <ore:treeSapling>
+  - <ore:listAllseed>
+  - <ore:listAllveggie>
+  - <ore:listAllgreenveggie>
+  - <ore:listAllfruit>
+  - <ore:listAllfishraw>
+  - <ore:listAllfishfresh>
+  - <ore:listAllfishcooked>
+  - <ore:listAllmeatraw>
+  - <ore:listAllmeatcooked>
+defaultrecipes:
+  <harvestcraft:saltitem>: atomic:harvestcraft:saltitem
+  <harvestcraft:freshwateritem>: atomic:harvestcraft:saltitem
+  <ore:listAllWater>: oredict:ore:listAllwater:harvestcraft:freshwateritem
+  <minecraft:bread>: harvestcraft:minecraft_bread
+  <harvestcraft:flouritem>: harvestcraft:flouritem_listallwheat

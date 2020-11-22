@@ -6,15 +6,17 @@
 
 import pandas as pd
 
+import yaml
+
 import dash
 import dash_cytoscape as cyto
 import dash_html_components as html
 
 import recipegraph
 
-cyto.load_extra_layouts()
-
-ROOTITEM = '<harvestcraft:thankfuldinneritem>'
+ROOTITEM = '<harvestcraft:cookedtofurkeyitem>'
+# ROOTITEM = '<harvestcraft:cranberryjellyitem>'
+# ROOTITEM = '<harvestcraft:thankfuldinneritem>'
 # ROOTITEM = '<minecraft:sticky_piston>'
 
 df_r = pd.read_csv('recipes.csv')
@@ -24,7 +26,11 @@ df_r = df_r.loc[
     df_r['id'].str.startswith('furnace') |
     df_r['id'].str.startswith('oredict')
 ].reset_index(drop=True)
-rg = recipegraph.RecipeGraph(df_r)
+
+with open('config.yaml') as fh:
+    forceatomic = yaml.safe_load(fh)['forceatomic']
+
+rg = recipegraph.RecipeGraph(df_r, forceatomic)
 rg.get_item(ROOTITEM)
 rg.remove_unnecessary_oredicts()
 
@@ -54,10 +60,8 @@ app = dash.Dash(__name__)
 app.layout = html.Div([
     cyto.Cytoscape(
         id='cytoscape-compound',
-        responsive=True,
-        # layout=dict(name='breadthfirst', root=f'[id="{ROOTITEM}"]'),
-        layout=dict(name='cose'),
-        style={'width': '100%', 'height': '100vh'},
+        layout=dict(name='cose', animate=False),
+        style={'width': '100%', 'height': '800px'},
         stylesheet=[
             {
                 'selector': 'node',
