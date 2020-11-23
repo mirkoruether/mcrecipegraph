@@ -4,7 +4,9 @@
 @author: Mirko Ruether
 """
 
+import copy
 import re
+import threading
 from collections import Counter
 from typing import List, Tuple, Dict
 import pandas as pd
@@ -49,11 +51,17 @@ class Item():
         return f'<Item name={self.name}>'
 
 class RecipeGraph():
-    items:Dict[str, Item] = {}
+    _items:Dict[str, Item] = {}
+    _lock = threading.RLock()
 
     def __init__(self, df_recipes:pd.DataFrame, forceatomic:List[str]=None) -> None:
         self.df_recipes:pd.DataFrame = df_recipes
         self.forceatomic:List[str] = forceatomic if forceatomic else []
+
+    @property
+    def items(self) -> Dict[str, Item]:
+        with self._lock:
+            return copy.deepcopy(self._items)
 
     @staticmethod
     def resolve_itemname(itemname:str):
@@ -61,12 +69,13 @@ class RecipeGraph():
         return re.search(r'<.*>', itemname).group(0)
 
     def get_item(self, itemname:str):
-        if itemname in self.items:
-            return self.items[itemname]
-        itemobj = Item(itemname)
-        self.items[itemname] = itemobj
-        self.register_recipes(itemobj)
-        return itemobj
+        with self._lock:
+            if itemname in self._items:
+                return self._items[itemname]
+            itemobj = Item(itemname)
+            self._items[itemname] = itemobj
+            self.register_recipes(itemobj)
+            return itemobj
 
     def register_recipes(self, itemobj:Item):
         if itemobj.name in self.forceatomic:
@@ -82,22 +91,23 @@ class RecipeGraph():
             )
 
     def remove_unnecessary_oredicts(self):
-        unnecessary_oredicts:Dict[str, Item] = {}
-        for item in self.items.values():
-            if item.name.startswith('<ore:'):
-                if len(item.recipes) == 1:
-                    unnecessary_oredicts[item.name] = item.recipes[0].ingredients[0][0]
+        with self._lock:
+            unnecessary_oredicts:Dict[str, Item] = {}
+            for item in self._items.values():
+                if item.name.startswith('<ore:'):
+                    if len(item.recipes) == 1:
+                        unnecessary_oredicts[item.name] = item.recipes[0].ingredients[0][0]
 
-        for item in self.items.values():
-            for recipe in item.recipes:
-                for i in range(len(recipe.ingredients)):
-                    ingr_name = recipe.ingredients[i][0].name
-                    ingr_amount = recipe.ingredients[i][1]
-                    if ingr_name in unnecessary_oredicts:
-                        recipe.ingredients[i] = (unnecessary_oredicts[ingr_name], ingr_amount)
+            for item in self._items.values():
+                for recipe in item.recipes:
+                    for i in range(len(recipe.ingredients)):
+                        ingr_name = recipe.ingredients[i][0].name
+                        ingr_amount = recipe.ingredients[i][1]
+                        if ingr_name in unnecessary_oredicts:
+                            recipe.ingredients[i] = (unnecessary_oredicts[ingr_name], ingr_amount)
 
-        for un_ordict in unnecessary_oredicts:
-            self.items.pop(un_ordict)
+            for un_ordict in unnecessary_oredicts:
+                self._items.pop(un_ordict)
 
 if __name__ == "__main__":
     df_r = pd.read_csv('recipes.csv')
