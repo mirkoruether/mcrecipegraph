@@ -11,6 +11,7 @@ import pandas as pd
 
 import yaml
 
+import flask
 import dash
 import dash_cytoscape as cyto
 import dash_bootstrap_components as dbc
@@ -61,7 +62,8 @@ def get_graph_data(item:recipegraph.Item) -> List[Dict]:
 
 rg = recipegraph.BasicRecipeGraph(df_r, appcfg['forceatomic'])
 
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+flask_app = flask.Flask(__name__)
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], server=flask_app)
 
 app.layout = dbc.Container([
     dbc.Row(dbc.Col(dbc.Card([
