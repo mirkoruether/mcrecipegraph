@@ -17,13 +17,13 @@ graphstyle:
     style:
       color: black
       shape: circle
-  - selector: .ingredientedge
+  - selector: .ingredient
     style:
       content: data(amount)
       source-arrow-color: black
       source-arrow-shape: triangle
       line-color: black
-  - selector: .recipeedge
+  - selector: .result
     style:
       content: data(amount)
       source-arrow-color: blue
@@ -39,6 +39,8 @@ forceatomic:
   - <harvestcraft:juiceritem>
   - <harvestcraft:skilletitem>
   - <harvestcraft:mixingbowlitem>
+  # Insane amount of options
+  - <harvestcraft:flouritem>
   # Items with circular recipes
   - <minecraft:wheat>
   - <minecraft:slime_ball>

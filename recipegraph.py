@@ -4,44 +4,58 @@
 @author: Mirko Ruether
 """
 
-import copy
+from abc import ABC, abstractmethod
 import re
 import threading
 from collections import Counter
 from typing import List, Tuple, Dict
 import pandas as pd
 
+class RecipeGraphError(RuntimeError):
+    pass
+
+class RecipeNotFoundError(RecipeGraphError):
+    pass
+
 class Recipe():
-    def __init__(self, resitemobj, rid, rtype, name, resamount, ingredients) -> None:
-        self.rid:int = rid
-        self.rtype:str = rtype
+    def __init__(self, name, recipetype, results, ingredients, recipegraph) -> None:
         self.name:str = name
-        self.resitemobj:Item = resitemobj
-        self.resamount:int = resamount
+        self.recipetype:str = recipetype
+        self.recipegraph:RecipeGraph = recipegraph
+        self.results:List[Tuple[Item, int]] = results
         self.ingredients:List[Tuple[Item, int]] = ingredients
 
     def __repr__(self) -> str:
         return f'<Recipe name={self.name}>'
 
 class Item():
-    def __init__(self, name:str) -> None:
+    def __init__(self, name, designation, recipegraph) -> None:
         self.name:str = name
+        self.designation:str = designation
+        self.recipegraph:RecipeGraph = recipegraph
+        self.recipes_resolved:bool = False
         self.recipes:List[Recipe] = []
-        self.atomicrecipe:Recipe = self._build_recipe(
-            'atomic', 'atomic:' + re.search(r'<(.*)>', name).group(1),
-            1, [], id_override=999
-        )
+        self.usages_resolved:bool = False
+        self.usages:List[Recipe] = []
+        self.atomicrecipe:Recipe = None
 
-    def _build_recipe(
-        self, rtype:str, recipename:str, resamount:int, ingredients:list, id_override=None
-    ) -> Recipe:
-        return Recipe(
-            self, id_override if id_override else len(self.recipes),
-            rtype, recipename, resamount, ingredients
-        )
+    def resolve_recipes(self, recursive:bool=False):
+        if self.recipes_resolved:
+            return
+        self.recipegraph.resolve_recipes(self)
+        if recursive:
+            for recipe in self.recipes:
+                for item, _ in recipe.ingredients:
+                    item.resolve_recipes(recursive=True)
 
-    def register_recipe(self, rtype:str, recipename:str, resamount:int, ingredients:list) -> None:
-        self.recipes.append(self._build_recipe(rtype, recipename, resamount, ingredients))
+    def resolve_usages(self, recursive:bool=False):
+        if self.usages_resolved:
+            return
+        self.recipegraph.resolve_usages(self)
+        if recursive:
+            for usage in self.usages:
+                for item, _ in usage.results:
+                    item.resolve_usages(recursive=True)
 
     @property
     def recipes_full(self) -> list:
@@ -50,58 +64,108 @@ class Item():
     def __repr__(self) -> str:
         return f'<Item name={self.name}>'
 
-class RecipeGraph():
-    _items:Dict[str, Item] = {}
-    _lock = threading.RLock()
-
-    def __init__(self, df_recipes:pd.DataFrame, forceatomic:List[str]=None) -> None:
-        self.df_recipes:pd.DataFrame = df_recipes
-        self.forceatomic:List[str] = forceatomic if forceatomic else []
-
-    @property
-    def items(self) -> Dict[str, Item]:
-        with self._lock:
-            return copy.deepcopy(self._items)
-
+class RecipeGraph(ABC):
     @staticmethod
     def resolve_itemname(itemname:str):
         itemname = itemname.replace(':*', '')
         return re.search(r'<.*>', itemname).group(0)
 
-    def get_item(self, itemname:str):
-        item = self._get_item(itemname)
-        self.remove_unnecessary_oredicts()
+    @abstractmethod
+    def get_item(self, itemname:str) -> Item:
+        pass
+
+    @abstractmethod
+    def get_recipe(self, recipename:str) -> Recipe:
+        pass
+
+    @abstractmethod
+    def resolve_recipes(self, item:Item) -> List[Recipe]:
+        pass
+
+    @abstractmethod
+    def resolve_usages(self, item:Item) -> List[Recipe]:
+        pass
+
+    def _clean_tree(self):
+        pass
+
+    def get_item_and_resolve_recipes(self, itemname:str):
+        item = self.get_item(itemname)
+        item.resolve_recipes(recursive=True)
+        self._clean_tree()
         return item
 
-    def _get_item(self, itemname:str):
+class BasicRecipeGraph(RecipeGraph):
+    _items:Dict[str, Item] = {}
+    _recipes:Dict[str, Recipe] = {}
+    _lock = threading.RLock()
+
+    def __init__(self, df_recipes:pd.DataFrame, forceatomic:List[str]=None) -> None:
+        self.df_recipes:pd.DataFrame = df_recipes
+        self.forceatomic:List[str] = forceatomic if forceatomic else []   
+
+    def get_item(self, itemname:str) -> Item:
         with self._lock:
             if itemname in self._items:
                 return self._items[itemname]
-            itemobj = Item(itemname)
+            itemobj = Item(itemname, itemname, self)
             self._items[itemname] = itemobj
-            self._register_recipes(itemobj)
+            itemobj.atomicrecipe = self.get_recipe(f'atomic:{itemobj.name[1:-1]}')
             return itemobj
 
-    def _register_recipes(self, itemobj:Item):
-        if itemobj.name in self.forceatomic:
-            return
-        df_rf = self.df_recipes.loc[self.df_recipes['resitem'] == itemobj.name]
-        for _, row in df_rf.iterrows():
-            ingredient_name_amounts = Counter([
-                RecipeGraph.resolve_itemname(x) for x in re.findall(r'<.+?>', row['craftraw'])
-            ])
-            itemobj.register_recipe(
-                row['crafttype'], row['id'], row['amount'],
-                [(self._get_item(k), v) for k, v in ingredient_name_amounts.items()]
-            )
+    def get_recipe(self, recipename:str):
+        with self._lock:
+            if recipename in self._recipes:
+                return self._recipes[recipename]
+            if recipename.startswith('atomic:'):
+                recipe = Recipe(
+                    recipename,
+                    'atomic',
+                    [(self.get_item(f'<{recipename.split(":", 1)[1]}>'), 1)],
+                    [],
+                    self
+                )
+                self._recipes[recipename] = recipe
+                return recipe
+            elif recipename in self.df_recipes['id'].to_list():
+                row = self.df_recipes.loc[self.df_recipes['id'] == recipename].iloc[0]
+                recipe = Recipe(
+                    recipename,
+                    row['crafttype'],
+                    [(self.get_item(row['resitem']), row['amount'])],
+                    [(self.get_item(k), v) for k, v in Counter([
+                        RecipeGraph.resolve_itemname(x) for x in re.findall(r'<.+?>', row['craftraw'])
+                    ]).items()],
+                    self
+                )
+                self._recipes[recipename] = recipe
+                return recipe
+            raise RecipeNotFoundError
+
+    def resolve_recipes(self, item:Item) -> List[Recipe]:
+        if item.recipes_resolved:
+            return item.recipes
+        if item.name in self.forceatomic:
+            item.recipes_resolved = True
+            return item.recipes
+        for _, row in self.df_recipes.loc[self.df_recipes['resitem'] == item.name].iterrows():
+            recipe = self.get_recipe(row['id'])
+            item.recipes.append(recipe)
+        item.recipes_resolved = True
+        return item.recipes
+
+    def resolve_usages(self, item:Item) -> List[Recipe]:
+        raise RuntimeError('Unsupported')
+
+    def _clean_tree(self):
+        self.remove_unnecessary_oredicts()
 
     def remove_unnecessary_oredicts(self):
         with self._lock:
             unnecessary_oredicts:Dict[str, Item] = {}
             for item in self._items.values():
-                if item.name.startswith('<ore:'):
-                    if len(item.recipes) == 1:
-                        unnecessary_oredicts[item.name] = item.recipes[0].ingredients[0][0]
+                if item.name.startswith('<ore:') and len(item.recipes) == 1:
+                    unnecessary_oredicts[item.name] = item.recipes[0].ingredients[0][0]
 
             for item in self._items.values():
                 for recipe in item.recipes:
@@ -123,8 +187,8 @@ if __name__ == "__main__":
         df_r['id'].str.startswith('oredict')
     ].reset_index(drop=True)
 
-    rg = RecipeGraph(df_r)
+    rg = BasicRecipeGraph(df_r, [])
 
-    myitem = rg.get_item('<harvestcraft:thankfuldinneritem>')
+    myitem = rg.get_item_and_resolve_recipes('<harvestcraft:thankfuldinneritem>')
     # myitem = get_item('<minecraft:sticky_piston>')
     print(myitem)

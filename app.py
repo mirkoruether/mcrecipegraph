@@ -19,6 +19,9 @@ from dash.dependencies import Input, Output, State
 
 import recipegraph
 
+DEFAULT_ITEM = '<harvestcraft:persimmonyogurtitem>'
+# DEFAULT_ITEM = '<minecraft:sticky_piston>'
+
 df_r = pd.read_csv('recipes.csv')
 df_r = df_r.loc[
     df_r['id'].str.startswith('minecraft') |
@@ -39,14 +42,15 @@ def _get_graph_data(item:recipegraph.Item, data:Dict[str, List[Dict]]):
             id=recipe.name, label=recipe.name
         ), classes='recipe'))
 
-        data[item.name].append(dict(data=dict(
-            source=item.name, target=recipe.name, amount=recipe.resamount
-        ), classes='recipeedge'))
+        for result, result_amount in recipe.results:
+            data[item.name].append(dict(data=dict(
+                source=result.name, target=recipe.name, amount=result_amount
+            ), classes='result'))
 
         for ingredient, ingredient_amount in recipe.ingredients:
             data[item.name].append(dict(data=dict(
                 source=recipe.name, target=ingredient.name, amount=ingredient_amount
-            ), classes='ingredientedge'))
+            ), classes='ingredient'))
             if not ingredient.name in data:
                 _get_graph_data(ingredient, data)
 
@@ -55,7 +59,7 @@ def get_graph_data(item:recipegraph.Item) -> List[Dict]:
     _get_graph_data(item, data)
     return list(itertools.chain.from_iterable(data.values()))
 
-rg = recipegraph.RecipeGraph(df_r, appcfg['forceatomic'])
+rg = recipegraph.BasicRecipeGraph(df_r, appcfg['forceatomic'])
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
@@ -64,7 +68,7 @@ app.layout = dbc.Container([
         dbc.CardHeader('Inputs'),
         dbc.CardBody(dbc.InputGroup([
             dbc.InputGroupAddon('Item ID', addon_type='prepend'),
-            dbc.Input(id='input-item', placeholder='<minecraft:sticky_piston>'),
+            dbc.Input(id='input-item', placeholder=DEFAULT_ITEM),
             dbc.InputGroupAddon(dbc.Button('Submit', id='input-submit'), addon_type='append'),
         ]))
     ]))),
@@ -86,8 +90,8 @@ app.layout = dbc.Container([
 )
 def update_graph(_, itemname):
     if not itemname:
-        itemname = '<minecraft:sticky_piston>'
-    item = rg.get_item(itemname)
+        itemname = DEFAULT_ITEM
+    item = rg.get_item_and_resolve_recipes(itemname)
     return get_graph_data(item)
 
 if __name__ == '__main__':
