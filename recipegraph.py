@@ -69,15 +69,20 @@ class RecipeGraph():
         return re.search(r'<.*>', itemname).group(0)
 
     def get_item(self, itemname:str):
+        item = self._get_item(itemname)
+        self.remove_unnecessary_oredicts()
+        return item
+
+    def _get_item(self, itemname:str):
         with self._lock:
             if itemname in self._items:
                 return self._items[itemname]
             itemobj = Item(itemname)
             self._items[itemname] = itemobj
-            self.register_recipes(itemobj)
+            self._register_recipes(itemobj)
             return itemobj
 
-    def register_recipes(self, itemobj:Item):
+    def _register_recipes(self, itemobj:Item):
         if itemobj.name in self.forceatomic:
             return
         df_rf = self.df_recipes.loc[self.df_recipes['resitem'] == itemobj.name]
@@ -87,7 +92,7 @@ class RecipeGraph():
             ])
             itemobj.register_recipe(
                 row['crafttype'], row['id'], row['amount'],
-                [(self.get_item(k), v) for k, v in ingredient_name_amounts.items()]
+                [(self._get_item(k), v) for k, v in ingredient_name_amounts.items()]
             )
 
     def remove_unnecessary_oredicts(self):

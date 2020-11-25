@@ -4,20 +4,20 @@
 @author: Mirko Ruether
 """
 
+import itertools
+
+from typing import Dict, List
 import pandas as pd
 
 import yaml
 
 import dash
 import dash_cytoscape as cyto
-import dash_html_components as html
+import dash_bootstrap_components as dbc
+
+from dash.dependencies import Input, Output, State
 
 import recipegraph
-
-ROOTITEM = '<harvestcraft:cookedtofurkeyitem>'
-# ROOTITEM = '<harvestcraft:cranberryjellyitem>'
-# ROOTITEM = '<harvestcraft:thankfuldinneritem>'
-# ROOTITEM = '<minecraft:sticky_piston>'
 
 df_r = pd.read_csv('recipes.csv')
 df_r = df_r.loc[
@@ -28,83 +28,67 @@ df_r = df_r.loc[
 ].reset_index(drop=True)
 
 with open('config.yaml') as fh:
-    forceatomic = yaml.safe_load(fh)['forceatomic']
+    appcfg = yaml.safe_load(fh)
 
-rg = recipegraph.RecipeGraph(df_r, forceatomic)
-rg.get_item(ROOTITEM)
-rg.remove_unnecessary_oredicts()
+def _get_graph_data(item:recipegraph.Item, data:Dict[str, List[Dict]]):
+    data[item.name] = [dict(data=dict(
+        id=item.name, label=item.name
+    ), classes='item')]
+    for recipe in item.recipes:
+        data[item.name].append(dict(data=dict(
+            id=recipe.name, label=recipe.name
+        ), classes='recipe'))
 
-ELEMENTS = []
-for item in rg.items.values():
-    ELEMENTS.append(dict(data=dict(id=item.name, label=item.name)))
+        data[item.name].append(dict(data=dict(
+            source=item.name, target=recipe.name, amount=recipe.resamount
+        ), classes='recipeedge'))
 
-    if item.name.startswith('<ore:'):
-        for recipe in item.recipes:
-            ingredient = recipe.ingredients[0][0]
-            ELEMENTS.append(dict(data=dict(source=item.name, target=ingredient.name), classes='ingredient'))
-    else:
-        for i, recipe in enumerate(item.recipes):
-            if len(item.recipes) <= 1:
-                source = item.name
-            else:
-                source = recipe.name
-                ELEMENTS.append(dict(data=dict(id=recipe.name, label=recipe.name, parent=item.name)))
-                for j in range(i):
-                    ELEMENTS.append(dict(data=dict(source=recipe.name, target=item.recipes[j].name), classes='recipealternative'))
+        for ingredient, ingredient_amount in recipe.ingredients:
+            data[item.name].append(dict(data=dict(
+                source=recipe.name, target=ingredient.name, amount=ingredient_amount
+            ), classes='ingredientedge'))
+            if not ingredient.name in data:
+                _get_graph_data(ingredient, data)
 
-            for ingredient, i_count in recipe.ingredients:
-                ELEMENTS.append(dict(data=dict(source=source, target=ingredient.name), classes='ingredient'))
+def get_graph_data(item:recipegraph.Item) -> List[Dict]:
+    data = {}
+    _get_graph_data(item, data)
+    return list(itertools.chain.from_iterable(data.values()))
 
-app = dash.Dash(__name__)
+rg = recipegraph.RecipeGraph(df_r, appcfg['forceatomic'])
 
-app.layout = html.Div([
-    cyto.Cytoscape(
-        id='cytoscape-compound',
-        layout=dict(name='cose', animate=False),
-        style={'width': '100%', 'height': '800px'},
-        stylesheet=[
-            {
-                'selector': 'node',
-                'style': {
-                    'content': 'data(label)',
-                    'opacity': 0.65,
-                    'z-index': 9999
-                }
-            },
-            {
-                'selector': 'edge',
-                'style': {
-                    'curve-style': 'bezier',
-                    'opacity': 0.45,
-                    'z-index': 5000
-                }
-            },
-            {
-                'selector': '.ingredient',
-                'style': {
-                    'source-arrow-color': 'black',
-                    'source-arrow-shape': 'triangle',
-                    'line-color': 'black'
-                }
-            },
-            {
-                'selector': '.recipe',
-                'style': {
-                    'source-arrow-color': 'grey',
-                    'source-arrow-shape': 'triangle',
-                    'line-color': 'grey'
-                }
-            },
-            {
-                'selector': '.recipealternative',
-                'style': {
-                    'line-color': 'grey'
-                }
-            },
-        ],
-        elements=ELEMENTS
-    )
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+
+app.layout = dbc.Container([
+    dbc.Row(dbc.Col(dbc.Card([
+        dbc.CardHeader('Inputs'),
+        dbc.CardBody(dbc.InputGroup([
+            dbc.InputGroupAddon('Item ID', addon_type='prepend'),
+            dbc.Input(id='input-item', placeholder='<minecraft:sticky_piston>'),
+            dbc.InputGroupAddon(dbc.Button('Submit', id='input-submit'), addon_type='append'),
+        ]))
+    ]))),
+    dbc.Row(dbc.Col(dbc.Card([
+        dbc.CardHeader('Recipe Graph'),
+        dbc.CardBody(cyto.Cytoscape(
+            id='mycytoscape',
+            layout=dict(name='cose', animate=False),
+            style={'height': '800px'},
+            stylesheet=appcfg['graphstyle']
+        ))
+    ]))),
 ])
+
+@app.callback(
+    Output('mycytoscape', 'elements'),
+    Input('input-submit', 'n_clicks'),
+    State('input-item', 'value')
+)
+def update_graph(_, itemname):
+    if not itemname:
+        itemname = '<minecraft:sticky_piston>'
+    item = rg.get_item(itemname)
+    return get_graph_data(item)
 
 if __name__ == '__main__':
     app.run_server(debug=True, port=5000)
