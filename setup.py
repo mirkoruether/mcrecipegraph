@@ -4,10 +4,8 @@
 @author: Mirko Ruether
 """
 
+import io
 import setuptools
-
-with open('README.md', 'r', encoding='utf-8') as fh:
-    long_description = fh.read()
 
 def read_req_file(req_type):
     with open('requires-{}.txt'.format(req_type)) as fh:
@@ -20,7 +18,7 @@ setuptools.setup(
     author='Mirko Ruether',
     author_email='mirkoruether@users.noreply.github.com',
     description='A small example package',
-    long_description=long_description,
+    long_description=io.open('README.md', encoding='utf-8').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/mirkoruether/mcrecipegraph',
     packages=setuptools.find_packages(exclude=['tests*']),
@@ -30,6 +28,9 @@ setuptools.setup(
     install_requires=read_req_file('install'),
     extras_require={
         'dev': read_req_file('dev'),
+    },
+    entry_points = {
+        'console_scripts': ['parse_crafttweaker=mcrecipegraph.tools.parse_crafttweaker:main'],
     },
     classifiers=[
         'Programming Language :: Python :: 3',

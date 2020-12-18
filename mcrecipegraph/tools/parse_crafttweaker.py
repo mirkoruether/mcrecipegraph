@@ -21,7 +21,7 @@ import re
 import logging
 import pandas as pd
 
-if __name__ == "__main__":
+def main():
     with open('crafttweaker.log') as fh:
         lines = pd.Series(fh.readlines())
 
