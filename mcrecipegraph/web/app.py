@@ -18,7 +18,7 @@ import dash_bootstrap_components as dbc
 
 from dash.dependencies import Input, Output, State
 
-import recipegraph
+import mcrecipegraph.core.recipegraph as recipegraph
 
 DEFAULT_ITEM = '<harvestcraft:persimmonyogurtitem>'
 # DEFAULT_ITEM = '<minecraft:sticky_piston>'

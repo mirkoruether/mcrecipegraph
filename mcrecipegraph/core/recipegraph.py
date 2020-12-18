@@ -102,7 +102,7 @@ class BasicRecipeGraph(RecipeGraph):
 
     def __init__(self, df_recipes:pd.DataFrame, forceatomic:List[str]=None) -> None:
         self.df_recipes:pd.DataFrame = df_recipes
-        self.forceatomic:List[str] = forceatomic if forceatomic else []   
+        self.forceatomic:List[str] = forceatomic if forceatomic else []
 
     def get_item(self, itemname:str) -> Item:
         with self._lock:
