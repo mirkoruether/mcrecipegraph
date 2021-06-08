@@ -1,0 +1,19 @@
+runtime: python39
+
+handlers:
+- url: /.*
+  script: auto
+
+# libraries:
+# - name: pandas
+  # version: 1.1.4
+# - name: numpy
+  # version: 1.19.3
+# - name: PyYAML
+  # version: 5.3.1
+# - name: dash
+  # version: 1.17.0
+# - name: dash-bootstrap-components
+  # version: 0.10.7
+# - name: dash-cytoscape
+  # version: 0.2.0
